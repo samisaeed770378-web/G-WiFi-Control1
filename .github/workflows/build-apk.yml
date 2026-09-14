@@ -21,33 +21,60 @@ jobs:
             git zip unzip openjdk-17-jdk \
             autoconf automake libtool pkg-config \
             zlib1g-dev libncurses5-dev libncursesw5-dev \
-            cmake libffi-dev libssl-dev
+            cmake libffi-dev libssl-dev \
+            libltdl-dev
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Buildozer
+      - name: Install fixed Android build tools
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install "cython<3"
-          pip install buildozer
+          python -m pip install --upgrade pip
+          python -m pip install "setuptools<70" wheel
+          python -m pip install "Cython==0.29.37"
+          python -m pip install "buildozer==1.5.0"
+          buildozer --version
+          cython --version
+
+      - name: Clean old Buildozer state
+        run: |
+          rm -rf .buildozer
+          rm -rf bin
+          mkdir -p bin
 
       - name: Build APK
+        env:
+          P4A_RELEASE: "0"
         run: |
-          buildozer android debug
+          yes | buildozer -v android debug
 
-      - name: Find APK
+      - name: Locate APK
         run: |
-          mkdir -p bin
+          echo "Searching for APK..."
           find . -type f -name "*.apk" -print
-          APK=$(find . -type f -name "*.apk" | head -n 1)
+
+          APK=$(find . -type f -name "*.apk" \
+            ! -path "./.git/*" \
+            | head -n 1)
+
           if [ -z "$APK" ]; then
             echo "ERROR: APK was not created"
+            echo "===== Buildozer log files ====="
+            find .buildozer -type f \( -name "*.log" -o -name "*.txt" \) -print 2>/dev/null | head -50
             exit 1
           fi
+
+          echo "APK FOUND: $APK"
           cp "$APK" bin/G-WiFi-Control1.apk
+          ls -lh bin/G-WiFi-Control1.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
